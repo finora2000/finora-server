@@ -4,6 +4,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { Model } from "mongoose";
 import { GoalsInvestment } from "src/schemas/GoalInvestmentSchema";
 import { Goals } from "src/schemas/GoalSchema";
+import { News } from "src/schemas/NewsSchema";
 import { PortfolioDetails } from "src/schemas/PortfolioDetailsSchema";
 import { PortfolioHistory } from "src/schemas/PortfolioHistorySchema";
 import { User } from "src/schemas/UserSchema";
@@ -19,7 +20,9 @@ export class CronService implements OnModuleInit {
     @InjectModel(PortfolioHistory.name)
     private PortfolioHistoryModel: Model<PortfolioHistory>,
     @InjectModel(GoalsInvestment.name)
-    private GoalsInvestmentModel: Model<GoalsInvestment>
+    private GoalsInvestmentModel: Model<GoalsInvestment>,
+    @InjectModel(News.name)
+    private NewsModel: Model<News>
   ) {}
 
   onModuleInit() {
@@ -29,10 +32,51 @@ export class CronService implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_WEEKDAY)
   async handleDailyCron() {
+    this.updateStockPrices();
+    this.getLatestNews();
+  }
+
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
+  async handleMonthlyCron() {
+    const allUserIds = await this.UserModel.find({}, { _id: true });
+    let currentMonth = new Date().toLocaleString("default", {
+      month: "short",
+    });
+    if (currentMonth === "Jan") currentMonth = `${new Date().getFullYear()}`;
+
+    const recordExists = await this.PortfolioHistoryModel.findOne({
+      month: currentMonth,
+    });
+    if (recordExists) return;
+    for (let index in allUserIds) {
+      const userId = allUserIds[index]._id.toString();
+      const latestPortfolioMonth = await this.PortfolioHistoryModel.findOne({
+        userId,
+      });
+      if (
+        new Date(latestPortfolioMonth.datetime).getMonth() <
+        new Date().getMonth()
+      ) {
+        const newPortfolioMonth = new this.PortfolioHistoryModel({
+          cash: latestPortfolioMonth.cash,
+          savings: latestPortfolioMonth.savings,
+          investedAmount: latestPortfolioMonth.investedAmount,
+          investedReturn: latestPortfolioMonth.investedReturn,
+          userId,
+          month: currentMonth,
+          datetime: new Date(),
+        });
+        await newPortfolioMonth.save();
+      }
+    }
+    console.log("Cron job executed on the 1st day of the month.");
+  }
+
+  async updateStockPrices() {
     const distinctTickerNames = await this.GoalsInvestmentModel.distinct(
       "tickerName"
     );
-    // this.PortfolioHistoryModel.find()
+
     for (let index in distinctTickerNames) {
       try {
         const tickerName = distinctTickerNames[index];
@@ -66,40 +110,19 @@ export class CronService implements OnModuleInit {
           },
           { multi: true }
         );
-
-        // let apiRoute = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${tickerName}&apikey=${process.env.APLHA_VINTAGE_API_KEY}`;
-        // const res = await fetch(apiRoute);
-        // console.log("res.status", res.status);
-        // const currentStockData = await res.json();
-        // console.log("currentStockData", currentStockData);
-        // const currentPrice = +currentStockData["Global Quote"]["05. price"];
-        // const dayChange = +currentStockData["Global Quote"]["09. change"];
-        // const dayChangePercent =
-        //   +`${currentStockData["Global Quote"]["10. change percent"]}`.replace(
-        //     "%",
-        //     ""
-        //   );
-        // await this.GoalsInvestmentModel.updateMany(
-        //   { tickerName },
-        //   {
-        //     $inc: { returns: dayChange, totalInterestGained: dayChange },
-        //     $set: { dayChange: dayChangePercent, todaysGain: dayChange },
-        //   }
-        // );
-        // });
       } catch (err) {
         console.log(err);
       }
     }
     const updatedGoalInvestments = await this.GoalsInvestmentModel.find();
     const allUserIds = await this.UserModel.find({}, { _id: true });
-    // console.log("allUserIds", allUserIds);
+
     let totalPortfolioReturns = 0;
     for (let index in allUserIds) {
       const userId = allUserIds[index]._id;
       const userGoals = await this.GoalsModel.find({ userId });
       for (let goalIndex in userGoals) {
-        const { _id, dayChange, returns, todaysGain, totalInterestGained } =
+        const { _id, returns, totalInterestGained } =
           userGoals[goalIndex].toJSON();
         const aggregatedChanges = {
           dayChange: [] as any,
@@ -150,8 +173,6 @@ export class CronService implements OnModuleInit {
             },
           }
         );
-
-        //     // goal.dayChange
       }
       let currentMonth = new Date().toLocaleString("default", {
         month: "short",
@@ -164,35 +185,24 @@ export class CronService implements OnModuleInit {
     }
   }
 
-  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
-  async handleMonthlyCron() {
-    const allUserIds = await this.UserModel.find({}, { _id: true });
-    for (let index in allUserIds) {
-      const userId = allUserIds[index]._id.toString();
-      const latestPortfolioMonth = await this.PortfolioHistoryModel.findOne({
-        userId,
-      });
-      if (
-        new Date(latestPortfolioMonth.datetime).getMonth() <
-        new Date().getMonth()
-      ) {
-        let currentMonth = new Date().toLocaleString("default", {
-          month: "short",
-        });
-        if (currentMonth === "Jan")
-          currentMonth = `${new Date().getFullYear()}`;
-        const newPortfolioMonth = new this.PortfolioHistoryModel({
-          cash: latestPortfolioMonth.cash,
-          savings: latestPortfolioMonth.savings,
-          investedAmount: latestPortfolioMonth.investedAmount,
-          investedReturn: latestPortfolioMonth.investedReturn,
-          userId,
-          month: currentMonth,
-          datetime: new Date(),
-        });
-        await newPortfolioMonth.save();
-      }
+  async getLatestNews() {
+    await this.NewsModel.deleteMany({});
+    const url = "https://yahoo-finance15.p.rapidapi.com/api/yahoo/ne/news";
+    const options = {
+      method: "GET",
+      headers: {
+        "X-RapidAPI-Key": process.env.RAPID_API_KEY,
+        "X-RapidAPI-Host": "yahoo-finance15.p.rapidapi.com",
+      },
+    };
+
+    try {
+      const response = await fetch(url, options);
+      const result = await response.json();
+      const top7News = result.slice(0, 7);
+      await this.NewsModel.insertMany(top7News);
+    } catch (error) {
+      console.error(error);
     }
-    console.log("Cron job executed on the 1st day of the month.");
   }
 }

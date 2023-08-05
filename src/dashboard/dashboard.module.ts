@@ -19,6 +19,7 @@ import {
   PortfolioHistory,
   PortfolioHistorySchema,
 } from "src/schemas/PortfolioHistorySchema";
+import { News, NewsSchema } from "src/schemas/NewsSchema";
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -28,6 +29,7 @@ import {
       { name: GoalsInvestment.name, schema: GoalsInvestmentSchema },
       { name: PortfolioDetails.name, schema: PortfolioDetailsSchema },
       { name: PortfolioHistory.name, schema: PortfolioHistorySchema },
+      { name: News.name, schema: NewsSchema },
     ]),
   ],
   controllers: [DashboardController],

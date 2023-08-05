@@ -5,6 +5,7 @@ import { Model } from "mongoose";
 import { Deposits } from "src/schemas/DepositsSchema";
 import { GoalsInvestment } from "src/schemas/GoalInvestmentSchema";
 import { Goals } from "src/schemas/GoalSchema";
+import { News } from "src/schemas/NewsSchema";
 import { PortfolioDetails } from "src/schemas/PortfolioDetailsSchema";
 import { PortfolioHistory } from "src/schemas/PortfolioHistorySchema";
 import { User } from "src/schemas/UserSchema";
@@ -20,7 +21,9 @@ export class DashboardService {
     @InjectModel(PortfolioHistory.name)
     private PortfolioHistoryModel: Model<PortfolioHistory>,
     @InjectModel(GoalsInvestment.name)
-    private GoalsInvestmentModel: Model<GoalsInvestment>
+    private GoalsInvestmentModel: Model<GoalsInvestment>,
+    @InjectModel(News.name)
+    private NewsModel: Model<News>
   ) {}
 
   async findAll(req: Request, res: Response) {
@@ -49,12 +52,16 @@ export class DashboardService {
       const portfolioHistory = await this.PortfolioHistoryModel.find({
         userId: userInfo._id,
       }).sort({ date: -1 });
+
+      const news = await this.NewsModel.find({});
+
       res.json({
         user: userInfo,
         goals: { goals, investments: allGoalInvestments },
         deposits,
         portfolioDetails,
         portfolioHistory,
+        news,
       });
     } catch (err) {
       console.log(err.message);

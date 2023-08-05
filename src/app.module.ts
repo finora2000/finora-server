@@ -24,6 +24,7 @@ import {
 } from "./schemas/GoalInvestmentSchema";
 import { ScheduleModule } from "@nestjs/schedule";
 import { CronService } from './cron/cron.service';
+import { News, NewsSchema } from "./schemas/NewsSchema";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CronService } from './cron/cron.service';
       { name: Deposits.name, schema: DepositsSchema },
       { name: Goals.name, schema: GoalsSchema },
       { name: GoalsInvestment.name, schema: GoalsInvestmentSchema },
+      { name: News.name, schema: NewsSchema },
     ]),
   ],
   controllers: [AppController],
