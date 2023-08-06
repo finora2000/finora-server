@@ -23,7 +23,7 @@ export class UsersService {
     try {
       const body: SignupDto = req.body;
 
-      const emailExist = this.UserModel.find({ email: body.email });
+      const emailExist = await this.UserModel.findOne({ email: body.email });
       if (emailExist) {
         return res.status(400).json({ msg: "Email is already registered!" });
       }
